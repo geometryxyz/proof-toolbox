@@ -1,13 +1,13 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 
-use crypto_primitives::homomorphic_encryption::{el_gamal, HomomorphicEncryptionScheme};
-use crypto_primitives::utils::rand::sample_vector;
-use crypto_primitives::vector_commitment::{pedersen, HomomorphicCommitmentScheme};
-use crypto_primitives::zkp::{arguments::shuffle, ArgumentOfKnowledge};
+use proof_essentials::homomorphic_encryption::{el_gamal, HomomorphicEncryptionScheme};
+use proof_essentials::utils::rand::sample_vector;
+use proof_essentials::vector_commitment::{pedersen, HomomorphicCommitmentScheme};
+use proof_essentials::zkp::{arguments::shuffle, ArgumentOfKnowledge};
 
 use ark_ff::Zero;
 use ark_std::{rand::thread_rng, UniformRand};
-use crypto_primitives::utils::permutation::Permutation;
+use proof_essentials::utils::permutation::Permutation;
 use starknet_curve;
 use std::iter::Iterator;
 
