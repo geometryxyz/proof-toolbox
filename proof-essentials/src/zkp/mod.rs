@@ -3,7 +3,7 @@ use ark_marlin::rng::FiatShamirRng;
 use ark_std::rand::Rng;
 use digest::Digest;
 
-// pub mod arguments;
+pub mod arguments;
 pub mod proofs;
 pub mod transcript;
 

@@ -2,14 +2,13 @@ use crate::error::CryptoError;
 
 use super::{Parameters, Statement};
 
-use ark_ff::to_bytes;
 use ark_ec::{AffineCurve, ProjectiveCurve};
+use ark_ff::to_bytes;
+use ark_marlin::rng::FiatShamirRng;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, SerializationError};
 use ark_std::io::{Read, Write};
-use digest::Digest;
-use ark_marlin::rng::FiatShamirRng;
 use ark_std::UniformRand;
-
+use digest::Digest;
 
 #[derive(CanonicalDeserialize, CanonicalSerialize)]
 pub struct Proof<C>
@@ -26,9 +25,18 @@ impl<C: ProjectiveCurve> Proof<C> {
         &self,
         parameters: &Parameters<C>,
         statement: &Statement<C>,
-        fs_rng: &mut FiatShamirRng<D>
+        fs_rng: &mut FiatShamirRng<D>,
     ) -> Result<(), CryptoError> {
-        fs_rng.absorb(&to_bytes![b"chaum_pedersen", parameters.g, parameters.h, statement.0, statement.1].unwrap());
+        fs_rng.absorb(
+            &to_bytes![
+                b"chaum_pedersen",
+                parameters.g,
+                parameters.h,
+                statement.0,
+                statement.1
+            ]
+            .unwrap(),
+        );
         fs_rng.absorb(&to_bytes![&self.a, &self.b].unwrap());
 
         let c = C::ScalarField::rand(fs_rng);

@@ -6,11 +6,11 @@ mod test {
     use crate::zkp::proofs::chaum_pedersen_dl_equality::DLEquality;
     use crate::zkp::ArgumentOfKnowledge;
     use ark_ec::{AffineCurve, ProjectiveCurve};
-    use ark_std::{rand::thread_rng, UniformRand};
-    use rand::{Rng, prelude::ThreadRng};
-    use starknet_curve;
     use ark_marlin::rng::FiatShamirRng;
+    use ark_std::{rand::thread_rng, UniformRand};
     use blake2::Blake2s;
+    use rand::{prelude::ThreadRng, Rng};
+    use starknet_curve;
 
     type AffinePoint = starknet_curve::Affine;
     type Curve = starknet_curve::Projective;
@@ -47,9 +47,14 @@ mod test {
         let witness = &secret;
 
         let mut fs_rng = FS::from_seed(b"Initialised with some input");
-        let proof =
-            DLEquality::<starknet_curve::Projective>::prove(&mut rng, &crs, &statement, &witness, &mut fs_rng)
-                .unwrap();
+        let proof = DLEquality::<starknet_curve::Projective>::prove(
+            &mut rng,
+            &crs,
+            &statement,
+            &witness,
+            &mut fs_rng,
+        )
+        .unwrap();
 
         let mut fs_rng = FS::from_seed(b"Initialised with some input");
         assert_eq!(
@@ -77,13 +82,23 @@ mod test {
         let wrong_witness = &another_scalar;
 
         let mut fs_rng = FS::from_seed(b"Initialised with some input");
-        let invalid_proof =
-            DLEquality::<starknet_curve::Projective>::prove(&mut rng, &crs, &statement, &wrong_witness, &mut fs_rng)
-                .unwrap();
+        let invalid_proof = DLEquality::<starknet_curve::Projective>::prove(
+            &mut rng,
+            &crs,
+            &statement,
+            &wrong_witness,
+            &mut fs_rng,
+        )
+        .unwrap();
 
         let mut fs_rng = FS::from_seed(b"Initialised with some input");
         assert_eq!(
-            DLEquality::<starknet_curve::Projective>::verify(&crs, &statement, &invalid_proof, &mut fs_rng),
+            DLEquality::<starknet_curve::Projective>::verify(
+                &crs,
+                &statement,
+                &invalid_proof,
+                &mut fs_rng
+            ),
             Err(CryptoError::ProofVerificationError(String::from(
                 "Chaum-Pedersen"
             )))

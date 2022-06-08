@@ -5,11 +5,12 @@ use crate::error::CryptoError;
 use crate::homomorphic_encryption::HomomorphicEncryptionScheme;
 use crate::utils::{rand::sample_vector, vector_arithmetic::dot_product};
 use crate::vector_commitment::HomomorphicCommitmentScheme;
-use crate::zkp::{arguments::scalar_powers, transcript::TranscriptProtocol};
+use crate::zkp::arguments::scalar_powers;
 
-use ark_ff::{Field, Zero};
+use ark_ff::{to_bytes, Field, Zero};
+use ark_marlin::rng::FiatShamirRng;
 use ark_std::rand::Rng;
-use merlin::Transcript;
+use digest::Digest;
 use std::marker::PhantomData;
 
 pub struct Prover<'a, Scalar, Enc, Comm>
@@ -19,7 +20,6 @@ where
     Comm: HomomorphicCommitmentScheme<Scalar>,
 {
     parameters: &'a Parameters<'a, Scalar, Enc, Comm>,
-    transcript: Transcript,
     statement: &'a Statement<'a, Scalar, Enc, Comm>,
     witness: &'a Witness<'a, Scalar>,
     _encryption_scheme: PhantomData<Enc>,
@@ -40,7 +40,6 @@ where
         //TODO add dimension assertions
         Self {
             parameters,
-            transcript: Transcript::new(b"multi_exponent_argument"),
             statement,
             witness,
             _encryption_scheme: PhantomData::<Enc>,
@@ -48,26 +47,28 @@ where
         }
     }
 
-    pub fn prove<R: Rng>(&self, rng: &mut R) -> Result<Proof<Scalar, Enc, Comm>, CryptoError> {
-        let mut transcript = self.transcript.clone();
-
-        transcript.append(b"public_key", self.parameters.public_key);
-        transcript.append(b"commit_key", self.parameters.commit_key);
-
-        transcript.append(
-            b"commitments_to_exponents",
-            self.statement.commitments_to_exponents,
+    pub fn prove<R: Rng, D: Digest>(
+        &self,
+        rng: &mut R,
+        fs_rng: &mut FiatShamirRng<D>,
+    ) -> Result<Proof<Scalar, Enc, Comm>, CryptoError> {
+        fs_rng.absorb(
+            &to_bytes![
+                b"multi-exponentiation",
+                self.parameters.public_key,
+                self.parameters.commit_key,
+                self.statement.commitments_to_exponents,
+                &self.statement.product,
+                self.statement.shuffled_ciphers
+            ]
+            .unwrap(),
         );
-        transcript.append(b"product", &self.statement.product);
-        transcript.append(b"shuffled_ciphers", self.statement.shuffled_ciphers);
 
         let m = self.witness.matrix_a.len();
         let n = self.witness.matrix_a[0].len();
         let num_of_diagonals = 2 * m - 1;
 
-        transcript.append(b"m", &m);
-        transcript.append(b"n", &n);
-        transcript.append(b"num_of_diagonals", &num_of_diagonals);
+        fs_rng.absorb(&to_bytes![m as u32, n as u32, num_of_diagonals as u32].unwrap());
 
         let a_0: Vec<Scalar> = sample_vector(rng, n);
         let r_0 = Scalar::rand(rng);
@@ -122,11 +123,9 @@ where
             })
             .collect::<Vec<Enc::Ciphertext>>();
 
-        transcript.append(b"a_0_commit", &a_0_commit);
-        transcript.append(b"commit_B_k", &commit_b_k);
-        transcript.append(b"vector_E_k", &vector_e_k);
+        fs_rng.absorb(&to_bytes![a_0_commit, commit_b_k, vector_e_k].unwrap());
 
-        let challenge = transcript.challenge_scalar(b"x");
+        let challenge = Scalar::rand(fs_rng);
 
         // Precompute all powers of the challenge from 0 to number_of_diagonals
         let challenge_powers = scalar_powers(challenge, num_of_diagonals);

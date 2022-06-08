@@ -4,12 +4,12 @@ mod test {
     use crate::error::CryptoError;
     use crate::zkp::{proofs::schnorr_identification, ArgumentOfKnowledge};
     use ark_ec::{AffineCurve, ProjectiveCurve};
+    use ark_marlin::rng::FiatShamirRng;
     use ark_std::rand::thread_rng;
     use ark_std::UniformRand;
-    use rand::{Rng, prelude::ThreadRng};
-    use starknet_curve;
-    use ark_marlin::rng::FiatShamirRng;
     use blake2::Blake2s;
+    use rand::{prelude::ThreadRng, Rng};
+    use starknet_curve;
 
     type Curve = starknet_curve::Projective;
     type Point = starknet_curve::Affine;
@@ -51,7 +51,8 @@ mod test {
         let another_scalar = Scalar::rand(&mut rng);
         let mut fs_rng = FS::from_seed(b"Initialised with some input");
 
-        let invalid_proof = Schnorr::prove(&mut rng, &crs, &pk, &another_scalar, &mut fs_rng).unwrap();
+        let invalid_proof =
+            Schnorr::prove(&mut rng, &crs, &pk, &another_scalar, &mut fs_rng).unwrap();
         let mut fs_rng = FS::from_seed(b"Initialised with some input");
 
         assert_eq!(
