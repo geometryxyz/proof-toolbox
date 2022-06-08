@@ -1,4 +1,4 @@
-// pub mod hadamard_product;
+pub mod hadamard_product;
 // pub mod matrix_elements_product;
 pub mod multi_exponentiation;
 // pub mod shuffle;

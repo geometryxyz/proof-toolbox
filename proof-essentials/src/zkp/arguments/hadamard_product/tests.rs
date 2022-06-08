@@ -9,7 +9,9 @@ mod test {
     use crate::zkp::{arguments::hadamard_product, ArgumentOfKnowledge};
 
     use ark_ff::One;
+    use ark_marlin::rng::FiatShamirRng;
     use ark_std::{rand::thread_rng, UniformRand};
+    use blake2::Blake2s;
     use starknet_curve;
     use std::iter::Iterator;
 
@@ -23,6 +25,8 @@ mod test {
     type Statement<'a> = hadamard_product::Statement<'a, Scalar, Comm>;
     type HadamardProductArgument<'a> = hadamard_product::HadamardProductArgument<'a, Scalar, Comm>;
     type Parameters<'a> = hadamard_product::Parameters<'a, Scalar, Comm>;
+
+    type FS = FiatShamirRng<Blake2s>;
 
     #[test]
     fn test_hadamard_product_argument() {
@@ -63,26 +67,51 @@ mod test {
 
         let valid_witness = Witness::new(&a_chunks, &r, &b, s);
 
-        let valid_proof =
-            HadamardProductArgument::prove(rng, &proof_parameters, &statement, &valid_witness)
-                .unwrap();
+        let mut fs_rng = FS::from_seed(b"Initialised with some input");
+        let valid_proof = HadamardProductArgument::prove(
+            rng,
+            &proof_parameters,
+            &statement,
+            &valid_witness,
+            &mut fs_rng,
+        )
+        .unwrap();
 
+        let mut fs_rng = FS::from_seed(b"Initialised with some input");
         assert_eq!(
             Ok(()),
-            HadamardProductArgument::verify(&proof_parameters, &statement, &valid_proof)
+            HadamardProductArgument::verify(
+                &proof_parameters,
+                &statement,
+                &valid_proof,
+                &mut fs_rng
+            )
         );
 
         let bad_b: Vec<Scalar> = sample_vector(rng, n);
         let invalid_witness = Witness::new(&a_chunks, &r, &bad_b, s);
-        let invalid_proof =
-            HadamardProductArgument::prove(rng, &proof_parameters, &statement, &invalid_witness)
-                .unwrap();
 
+        let mut fs_rng = FS::from_seed(b"Initialised with some input");
+        let invalid_proof = HadamardProductArgument::prove(
+            rng,
+            &proof_parameters,
+            &statement,
+            &invalid_witness,
+            &mut fs_rng,
+        )
+        .unwrap();
+
+        let mut fs_rng = FS::from_seed(b"Initialised with some input");
         assert_eq!(
             Err(CryptoError::ProofVerificationError(String::from(
                 "Hadamard Product (5.1)",
             ))),
-            HadamardProductArgument::verify(&proof_parameters, &statement, &invalid_proof)
+            HadamardProductArgument::verify(
+                &proof_parameters,
+                &statement,
+                &invalid_proof,
+                &mut fs_rng
+            )
         );
     }
 }
