@@ -8,11 +8,13 @@ mod test {
 
     use super::super::YMapping;
     use ark_ff::Zero;
+    use ark_marlin::rng::FiatShamirRng;
     use ark_std::{rand::thread_rng, UniformRand};
+    use blake2::Blake2s;
     use starknet_curve;
     use std::iter::Iterator;
 
-    // Choose ellitptic curve setting
+    // Choose elliptic curve setting
     type Curve = starknet_curve::Projective;
     type Scalar = starknet_curve::Fr;
 
@@ -22,6 +24,9 @@ mod test {
     type Statement<'a> = zero_value_bilinear_map::Statement<'a, Scalar, Comm>;
     type ZeroValueArgument<'a> = zero_value_bilinear_map::ZeroValueArgument<'a, Scalar, Comm>;
     type Parameters<'a> = zero_value_bilinear_map::Parameters<'a, Scalar, Comm>;
+
+    // Fiat Shamir
+    type FS = FiatShamirRng<Blake2s>;
 
     #[test]
     fn test_zero_argument() {
@@ -67,21 +72,40 @@ mod test {
 
         let valid_witness = Witness::new(&a_chunks, &r, &b_chunks, &s);
 
-        let valid_proof =
-            ZeroValueArgument::prove(rng, &proof_parameters, &statement, &valid_witness).unwrap();
+        let mut fs_rng = FS::from_seed(b"Initialised with some input");
+        let valid_proof = ZeroValueArgument::prove(
+            rng,
+            &proof_parameters,
+            &statement,
+            &valid_witness,
+            &mut fs_rng,
+        )
+        .unwrap();
 
-        assert_eq!(Ok(()), valid_proof.verify(&proof_parameters, &statement));
+        let mut fs_rng = FS::from_seed(b"Initialised with some input");
+        assert_eq!(
+            Ok(()),
+            valid_proof.verify(&proof_parameters, &statement, &mut fs_rng)
+        );
 
         let bad_witness = Witness::new(&a_chunks, &r, &a_chunks, &r);
 
-        let invalid_proof =
-            ZeroValueArgument::prove(rng, &proof_parameters, &statement, &bad_witness).unwrap();
+        let mut fs_rng = FS::from_seed(b"Initialised with some input");
+        let invalid_proof = ZeroValueArgument::prove(
+            rng,
+            &proof_parameters,
+            &statement,
+            &bad_witness,
+            &mut fs_rng,
+        )
+        .unwrap();
 
+        let mut fs_rng = FS::from_seed(b"Initialised with some input");
         assert_eq!(
             Err(CryptoError::ProofVerificationError(String::from(
                 "Zero Argument (5.2)",
             ))),
-            ZeroValueArgument::verify(&proof_parameters, &statement, &invalid_proof)
+            ZeroValueArgument::verify(&proof_parameters, &statement, &invalid_proof, &mut fs_rng)
         );
     }
 }

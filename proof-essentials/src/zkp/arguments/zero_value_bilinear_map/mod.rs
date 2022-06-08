@@ -6,7 +6,9 @@ use crate::error::CryptoError;
 use crate::vector_commitment::HomomorphicCommitmentScheme;
 use crate::zkp::{arguments::scalar_powers, ArgumentOfKnowledge};
 use ark_ff::Field;
+use ark_marlin::rng::FiatShamirRng;
 use ark_std::{marker::PhantomData, rand::Rng};
+use digest::Digest;
 
 pub struct ZeroValueArgument<'a, F, Comm>
 where
@@ -27,24 +29,26 @@ where
     type Witness = Witness<'a, Scalar>;
     type Proof = proof::Proof<Scalar, Comm>;
 
-    fn prove<R: Rng>(
+    fn prove<R: Rng, D: Digest>(
         rng: &mut R,
         common_reference_string: &Self::CommonReferenceString,
         statement: &Self::Statement,
         witness: &Self::Witness,
+        fs_rng: &mut FiatShamirRng<D>,
     ) -> Result<Self::Proof, CryptoError> {
         let prover = prover::Prover::new(common_reference_string, statement, witness);
-        let proof = prover.prove(rng)?;
+        let proof = prover.prove(rng, fs_rng)?;
 
         Ok(proof)
     }
 
-    fn verify(
+    fn verify<D: Digest>(
         common_reference_string: &Self::CommonReferenceString,
         statement: &Self::Statement,
         proof: &Self::Proof,
+        fs_rng: &mut FiatShamirRng<D>,
     ) -> Result<(), CryptoError> {
-        proof.verify(&common_reference_string, &statement)
+        proof.verify(&common_reference_string, &statement, fs_rng)
     }
 }
 

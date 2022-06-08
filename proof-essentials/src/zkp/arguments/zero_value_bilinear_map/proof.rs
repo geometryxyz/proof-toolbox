@@ -4,12 +4,12 @@ use crate::error::CryptoError;
 use crate::utils::vector_arithmetic::dot_product;
 use crate::vector_commitment::HomomorphicCommitmentScheme;
 use crate::zkp::arguments::scalar_powers;
-use crate::zkp::transcript::TranscriptProtocol;
 
-use ark_ff::Field;
+use ark_ff::{to_bytes, Field};
+use ark_marlin::rng::FiatShamirRng;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, SerializationError};
 use ark_std::io::{Read, Write};
-use merlin::Transcript;
+use digest::Digest;
 
 #[derive(CanonicalDeserialize, CanonicalSerialize)]
 pub struct Proof<Scalar, Comm>
@@ -20,7 +20,7 @@ where
     // Round 1
     pub a_0_commit: Comm::Commitment,
     pub b_m_commit: Comm::Commitment,
-    pub vector_of_commited_diagonals: Vec<Comm::Commitment>,
+    pub vector_of_committed_diagonals: Vec<Comm::Commitment>,
 
     // Round 2
     pub a_blinded: Vec<Scalar>,
@@ -35,12 +35,13 @@ where
     Scalar: Field,
     Comm: HomomorphicCommitmentScheme<Scalar>,
 {
-    pub fn verify(
+    pub fn verify<D: Digest>(
         &self,
         proof_parameters: &Parameters<Scalar, Comm>,
         statement: &Statement<Scalar, Comm>,
+        fs_rng: &mut FiatShamirRng<D>,
     ) -> Result<(), CryptoError> {
-        if self.vector_of_commited_diagonals[proof_parameters.m + 1]
+        if self.vector_of_committed_diagonals[proof_parameters.m + 1]
             != Comm::commit(
                 proof_parameters.commit_key,
                 &vec![Scalar::zero()],
@@ -52,26 +53,32 @@ where
             )));
         }
 
-        let mut transcript = Transcript::new(b"zero_argument");
+        fs_rng.absorb(&to_bytes![b"zero_argument"].unwrap());
 
         // Public parameters
-        transcript.append(b"commit_key", proof_parameters.commit_key);
-        transcript.append(b"m", &proof_parameters.m);
-        transcript.append(b"n", &proof_parameters.n);
-
-        // Random values
-        transcript.append(b"c_a_0", &self.a_0_commit);
-        transcript.append(b"c_b_m", &self.b_m_commit);
-
-        // Commitments
-        transcript.append(b"commitment_to_a", statement.commitment_to_a);
-        transcript.append(b"commitment_to_b", statement.commitment_to_b);
-        transcript.append(
-            b"vector_of_commited_diagonals",
-            &self.vector_of_commited_diagonals,
+        fs_rng.absorb(
+            &to_bytes![
+                proof_parameters.commit_key,
+                proof_parameters.m as u32,
+                proof_parameters.n as u32
+            ]
+            .unwrap(),
         );
 
-        let x = transcript.challenge_scalar(b"x");
+        // Random values
+        fs_rng.absorb(&to_bytes![self.a_0_commit, self.b_m_commit].unwrap());
+
+        // Commitments
+        fs_rng.absorb(
+            &to_bytes![
+                statement.commitment_to_a,
+                statement.commitment_to_b,
+                self.vector_of_committed_diagonals
+            ]
+            .unwrap(),
+        );
+
+        let x = Scalar::rand(fs_rng);
 
         // Precompute all powers of the challenge from 0 to number_of_diagonals
         let challenge_powers = scalar_powers(x, 2 * proof_parameters.m);
@@ -113,7 +120,7 @@ where
         }
 
         // Verify commitments to the diagonals against a commitment on bilinear_map(blinded a, blinded a) with blinded random t
-        let left = dot_product(&challenge_powers, &self.vector_of_commited_diagonals)?;
+        let left = dot_product(&challenge_powers, &self.vector_of_committed_diagonals)?;
         let a_star_b = statement
             .bilinear_map
             .compute_mapping(&self.a_blinded, &self.b_blinded)?;
