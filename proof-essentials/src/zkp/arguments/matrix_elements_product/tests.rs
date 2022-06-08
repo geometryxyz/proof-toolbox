@@ -6,7 +6,9 @@ mod test {
     use crate::zkp::{arguments::matrix_elements_product, ArgumentOfKnowledge};
 
     use ark_ff::One;
+    use ark_marlin::rng::FiatShamirRng;
     use ark_std::{rand::thread_rng, UniformRand};
+    use blake2::Blake2s;
     use starknet_curve;
     use std::iter::Iterator;
 
@@ -20,6 +22,8 @@ mod test {
     type Statement<'a> = matrix_elements_product::Statement<'a, Scalar, Comm>;
     type ProductArgument<'a> = matrix_elements_product::ProductArgument<'a, Scalar, Comm>;
     type Parameters<'a> = matrix_elements_product::Parameters<'a, Scalar, Comm>;
+
+    type FS = FiatShamirRng<Blake2s>;
 
     #[test]
     fn test_complete_product_argument() {
@@ -53,10 +57,21 @@ mod test {
         // let honest_prover = Prover::new(&proof_parameters, &statement, &valid_witness);
         // let valid_proof = honest_prover.prove(rng);
 
-        let valid_proof =
-            ProductArgument::prove(rng, &proof_parameters, &statement, &valid_witness).unwrap();
+        let mut fs_rng = FS::from_seed(b"Initialised with some input");
+        let valid_proof = ProductArgument::prove(
+            rng,
+            &proof_parameters,
+            &statement,
+            &valid_witness,
+            &mut fs_rng,
+        )
+        .unwrap();
 
-        assert_eq!(Ok(()), valid_proof.verify(&proof_parameters, &statement));
+        let mut fs_rng = FS::from_seed(b"Initialised with some input");
+        assert_eq!(
+            Ok(()),
+            valid_proof.verify(&proof_parameters, &statement, &mut fs_rng)
+        );
 
         let new_random_scalars: Vec<Scalar> = sample_vector(rng, m * n);
         let bad_a_chunks = new_random_scalars
@@ -74,10 +89,22 @@ mod test {
         let statement = Statement::new(&bad_a_commits, raw_prod);
 
         let invalid_witness = Witness::new(&bad_a_chunks, &r);
-        let invalid_proof =
-            ProductArgument::prove(rng, &proof_parameters, &statement, &invalid_witness).unwrap();
 
-        assert_ne!(Ok(()), invalid_proof.verify(&proof_parameters, &statement));
+        let mut fs_rng = FS::from_seed(b"Initialised with some input");
+        let invalid_proof = ProductArgument::prove(
+            rng,
+            &proof_parameters,
+            &statement,
+            &invalid_witness,
+            &mut fs_rng,
+        )
+        .unwrap();
+
+        let mut fs_rng = FS::from_seed(b"Initialised with some input");
+        assert_ne!(
+            Ok(()),
+            invalid_proof.verify(&proof_parameters, &statement, &mut fs_rng)
+        );
 
         let fake_product = Scalar::rand(rng);
 
@@ -85,13 +112,20 @@ mod test {
 
         let invalid_witness = Witness::new(&a_chunks, &r);
 
-        let invalid_proof =
-            ProductArgument::prove(rng, &proof_parameters, &wrong_statement, &invalid_witness)
-                .unwrap();
+        let mut fs_rng = FS::from_seed(b"Initialised with some input");
+        let invalid_proof = ProductArgument::prove(
+            rng,
+            &proof_parameters,
+            &wrong_statement,
+            &invalid_witness,
+            &mut fs_rng,
+        )
+        .unwrap();
 
+        let mut fs_rng = FS::from_seed(b"Initialised with some input");
         assert_ne!(
             Ok(()),
-            invalid_proof.verify(&proof_parameters, &wrong_statement)
+            invalid_proof.verify(&proof_parameters, &wrong_statement, &mut fs_rng)
         );
     }
 }
