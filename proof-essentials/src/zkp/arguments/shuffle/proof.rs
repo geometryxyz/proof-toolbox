@@ -1,5 +1,3 @@
-use crate::zkp::arguments::{matrix_elements_product as product_argument, multi_exponentiation};
-
 use super::{Parameters, Statement};
 
 use crate::error::CryptoError;
@@ -7,12 +5,13 @@ use crate::homomorphic_encryption::HomomorphicEncryptionScheme;
 use crate::utils::vector_arithmetic::dot_product;
 use crate::vector_commitment::HomomorphicCommitmentScheme;
 use crate::zkp::arguments::scalar_powers;
-use crate::zkp::transcript::TranscriptProtocol;
+use crate::zkp::arguments::{matrix_elements_product as product_argument, multi_exponentiation};
 
-use ark_ff::Field;
+use ark_ff::{to_bytes, Field};
+use ark_marlin::rng::FiatShamirRng;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, SerializationError};
 use ark_std::io::{Read, Write};
-use merlin::Transcript;
+use digest::Digest;
 
 #[derive(CanonicalDeserialize, CanonicalSerialize)]
 pub struct Proof<Scalar, Enc, Comm>
@@ -33,35 +32,41 @@ where
     Enc: HomomorphicEncryptionScheme<Scalar>,
     Comm: HomomorphicCommitmentScheme<Scalar>,
 {
-    pub fn verify(
+    pub fn verify<D: Digest>(
         &self,
         proof_parameters: &Parameters<Scalar, Enc, Comm>,
         statement: &Statement<Scalar, Enc>,
+        fs_rng: &mut FiatShamirRng<D>,
     ) -> Result<(), CryptoError> {
         statement.is_valid()?;
 
-        let mut transcript = Transcript::new(b"shuffle_argument");
+        fs_rng.absorb(&to_bytes![b"shuffle_argument"].unwrap());
+
         // Public data
-        transcript.append(b"public_key", proof_parameters.public_key);
-        transcript.append(b"commit_key", proof_parameters.commit_key);
+        fs_rng
+            .absorb(&to_bytes![proof_parameters.public_key, proof_parameters.commit_key].unwrap());
 
         // statement
-        transcript.append(b"ciphers", statement.input_ciphers);
-        transcript.append(b"shuffled", statement.shuffled_ciphers);
-        transcript.append(b"m", &statement.m);
-        transcript.append(b"n", &statement.n);
+        fs_rng.absorb(
+            &to_bytes![
+                statement.input_ciphers,
+                statement.shuffled_ciphers,
+                statement.m as u32,
+                statement.n as u32
+            ]
+            .unwrap(),
+        );
 
         // round 1
-        transcript.append(b"a_commits", &self.a_commits);
-        let x: Scalar = transcript.challenge_scalar(b"x");
+        fs_rng.absorb(&to_bytes![self.a_commits].unwrap());
+        let x = Scalar::rand(fs_rng);
 
         let challenge_powers = scalar_powers(x, statement.m * statement.n)[1..].to_vec();
 
         // round 2
-        transcript.append(b"b_commits", &self.b_commits);
-
-        let y: Scalar = transcript.challenge_scalar(b"y");
-        let z: Scalar = transcript.challenge_scalar(b"z");
+        fs_rng.absorb(&to_bytes![self.b_commits].unwrap());
+        let y = Scalar::rand(fs_rng);
+        let z = Scalar::rand(fs_rng);
 
         // PRODUCT ARGUMENT -------------------------------------------------------------
         let z_vec = vec![-z; statement.n];
@@ -95,8 +100,11 @@ where
         let product_argument_statement =
             product_argument::Statement::new(&commitments_to_a, verifier_side_expected_product);
 
-        self.product_argument_proof
-            .verify(&product_argument_parameters, &product_argument_statement)?;
+        self.product_argument_proof.verify(
+            &product_argument_parameters,
+            &product_argument_statement,
+            fs_rng,
+        )?;
 
         // MULTI-EXPONENTIATION ARGUMENT -------------------------------------------------------
         let multi_exp_parameters = multi_exponentiation::Parameters::new(
@@ -118,7 +126,7 @@ where
             multi_exponentiation::Statement::new(&shuffled_chunks, product, &self.b_commits);
 
         self.multi_exp_proof
-            .verify(&multi_exp_parameters, &multi_exp_statement)?;
+            .verify(&multi_exp_parameters, &multi_exp_statement, fs_rng)?;
 
         Ok(())
     }

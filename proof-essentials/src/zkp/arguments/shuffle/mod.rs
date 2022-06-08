@@ -6,10 +6,12 @@ use crate::error::CryptoError;
 use crate::homomorphic_encryption::HomomorphicEncryptionScheme;
 use crate::utils::permutation::Permutation;
 use crate::vector_commitment::HomomorphicCommitmentScheme;
-
 use crate::zkp::ArgumentOfKnowledge;
+
 use ark_ff::Field;
+use ark_marlin::rng::FiatShamirRng;
 use ark_std::rand::Rng;
+use digest::Digest;
 use std::marker::PhantomData;
 
 pub struct ShuffleArgument<
@@ -34,24 +36,26 @@ where
     type Witness = Witness<'a, F>;
     type Proof = proof::Proof<F, Enc, Comm>;
 
-    fn prove<R: Rng>(
+    fn prove<R: Rng, D: Digest>(
         rng: &mut R,
         common_reference_string: &Self::CommonReferenceString,
         statement: &Self::Statement,
         witness: &Self::Witness,
+        fs_rng: &mut FiatShamirRng<D>,
     ) -> Result<Self::Proof, CryptoError> {
         let prover = prover::Prover::new(&common_reference_string, &statement, &witness);
-        let proof = prover.prove(rng)?;
+        let proof = prover.prove(rng, fs_rng)?;
 
         Ok(proof)
     }
 
-    fn verify(
+    fn verify<D: Digest>(
         common_reference_string: &Self::CommonReferenceString,
         statement: &Self::Statement,
         proof: &Self::Proof,
+        fs_rng: &mut FiatShamirRng<D>,
     ) -> Result<(), CryptoError> {
-        proof.verify(&common_reference_string, &statement)
+        proof.verify(&common_reference_string, &statement, fs_rng)
     }
 }
 

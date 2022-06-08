@@ -1,4 +1,4 @@
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 
 use proof_essentials::homomorphic_encryption::{el_gamal, HomomorphicEncryptionScheme};
 use proof_essentials::utils::rand::sample_vector;
@@ -6,8 +6,11 @@ use proof_essentials::vector_commitment::{pedersen, HomomorphicCommitmentScheme}
 use proof_essentials::zkp::{arguments::shuffle, ArgumentOfKnowledge};
 
 use ark_ff::Zero;
-use ark_std::{rand::thread_rng, UniformRand};
+use ark_marlin::rng::FiatShamirRng;
+use ark_std::UniformRand;
+use blake2::Blake2s;
 use proof_essentials::utils::permutation::Permutation;
+use rand::rngs::OsRng;
 use starknet_curve;
 use std::iter::Iterator;
 
@@ -26,7 +29,7 @@ type Statement<'a> = shuffle::Statement<'a, Scalar, Enc>;
 type ShuffleArgument<'a> = shuffle::ShuffleArgument<'a, Scalar, Enc, Comm>;
 type Parameters<'a> = shuffle::Parameters<'a, Scalar, Enc, Comm>;
 
-use rand::rngs::OsRng;
+type FS = FiatShamirRng<Blake2s>;
 
 fn criterion_benchmark(c: &mut Criterion) {
     let mut rng = OsRng;
@@ -83,11 +86,19 @@ fn criterion_benchmark(c: &mut Criterion) {
             let parameters = Parameters::new(&encrypt_parameters, &pk, &commit_key, &generator);
             let statement = Statement::new(&ciphers, &shuffled_ciphers, m, n);
             let witness = Witness::new(&permutation, &masking_factors);
+            let mut fs_rng = FS::from_seed(b"Initialised with some input");
             let bench_id =
                 BenchmarkId::new("number_of_ciphers:", format!("({} * {} = {})", m, n, m * n));
             group.bench_function(bench_id, |b| {
                 b.iter(|| {
-                    ShuffleArgument::prove(&mut rng, &parameters, &statement, &witness).unwrap();
+                    ShuffleArgument::prove(
+                        &mut rng,
+                        &parameters,
+                        &statement,
+                        &witness,
+                        &mut fs_rng,
+                    )
+                    .unwrap();
                 })
             });
         }
@@ -102,16 +113,20 @@ fn criterion_benchmark(c: &mut Criterion) {
             let parameters = Parameters::new(&encrypt_parameters, &pk, &commit_key, &generator);
             let statement = Statement::new(&ciphers, &shuffled_ciphers, m, n);
             let witness = Witness::new(&permutation, &masking_factors);
+            let mut fs_rng = FS::from_seed(b"Initialised with some input");
             let proof =
-                ShuffleArgument::prove(&mut rng, &parameters, &statement, &witness).unwrap();
+                ShuffleArgument::prove(&mut rng, &parameters, &statement, &witness, &mut fs_rng)
+                    .unwrap();
+            let mut fs_rng = FS::from_seed(b"Initialised with some input");
             assert_eq!(
                 Ok(()),
-                ShuffleArgument::verify(&parameters, &statement, &proof)
+                ShuffleArgument::verify(&parameters, &statement, &proof, &mut fs_rng)
             );
             let bench_id =
                 BenchmarkId::new("number_of_ciphers:", format!("({} * {} = {})", m, n, m * n));
+            let mut fs_rng = FS::from_seed(b"Initialised with some input");
             group.bench_function(bench_id, |b| {
-                b.iter(|| ShuffleArgument::verify(&parameters, &statement, &proof))
+                b.iter(|| ShuffleArgument::verify(&parameters, &statement, &proof, &mut fs_rng))
             });
         }
     }
