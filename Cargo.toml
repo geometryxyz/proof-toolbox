@@ -1,0 +1,6 @@
+[workspace]
+
+members = [
+    "proof-essentials",
+    "starknet-curve"
+]
