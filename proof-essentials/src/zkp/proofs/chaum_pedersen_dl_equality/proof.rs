@@ -1,12 +1,15 @@
 use crate::error::CryptoError;
-use crate::zkp::transcript::TranscriptProtocol;
 
 use super::{Parameters, Statement};
 
+use ark_ff::to_bytes;
 use ark_ec::{AffineCurve, ProjectiveCurve};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, SerializationError};
 use ark_std::io::{Read, Write};
-use merlin::Transcript;
+use digest::Digest;
+use ark_marlin::rng::FiatShamirRng;
+use ark_std::UniformRand;
+
 
 #[derive(CanonicalDeserialize, CanonicalSerialize)]
 pub struct Proof<C>
@@ -19,22 +22,16 @@ where
 }
 
 impl<C: ProjectiveCurve> Proof<C> {
-    pub fn verify(
+    pub fn verify<D: Digest>(
         &self,
         parameters: &Parameters<C>,
         statement: &Statement<C>,
+        fs_rng: &mut FiatShamirRng<D>
     ) -> Result<(), CryptoError> {
-        let mut transcript = Transcript::new(b"chaum_pedersen");
+        fs_rng.absorb(&to_bytes![b"chaum_pedersen", parameters.g, parameters.h, statement.0, statement.1].unwrap());
+        fs_rng.absorb(&to_bytes![&self.a, &self.b].unwrap());
 
-        transcript.append(b"g", parameters.g);
-        transcript.append(b"h", parameters.h);
-        transcript.append(b"x", statement.0);
-        transcript.append(b"y", statement.1);
-
-        transcript.append(b"a", &self.a);
-        transcript.append(b"b", &self.b);
-
-        let c: C::ScalarField = transcript.challenge_scalar(b"c");
+        let c = C::ScalarField::rand(fs_rng);
 
         // g * r ==? a + x*c
         if parameters.g.mul(self.r) != self.a + statement.0.mul(c) {

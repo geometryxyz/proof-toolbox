@@ -1,12 +1,11 @@
 use super::{proof::Proof, Parameters, Statement, Witness};
 
-use crate::zkp::transcript::TranscriptProtocol;
-
 use ark_ec::{AffineCurve, ProjectiveCurve};
-use ark_ff::PrimeField;
+use ark_ff::{PrimeField, to_bytes};
 use ark_std::rand::Rng;
 use ark_std::UniformRand;
-use merlin::Transcript;
+use digest::Digest;
+use ark_marlin::rng::FiatShamirRng;
 
 use std::marker::PhantomData;
 
@@ -21,22 +20,21 @@ impl<C> Prover<C>
 where
     C: ProjectiveCurve,
 {
-    pub fn create_proof<R: Rng>(
+    pub fn create_proof<R: Rng, D: Digest>(
         rng: &mut R,
         pp: &Parameters<C>,
         statement: &Statement<C>,
         witness: &Witness<C>,
+        fs_rng: &mut FiatShamirRng<D>
     ) -> Proof<C> {
-        let mut transcript = Transcript::new(b"schnorr_identity");
-        transcript.append(b"public_generator", pp);
-        transcript.append(b"public_key", statement);
-
+        
         let random = C::ScalarField::rand(rng);
-
+        
         let random_commit = pp.mul(random.into_repr());
-        transcript.append(b"witness_commit", &random_commit);
+        
+        fs_rng.absorb(&to_bytes![b"schnorr_identity", pp, statement, random_commit].unwrap());
 
-        let c: C::ScalarField = transcript.challenge_scalar(b"c");
+        let c = C::ScalarField::rand(fs_rng);
 
         let opening = random - c * witness;
 
