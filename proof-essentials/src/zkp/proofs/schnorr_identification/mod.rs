@@ -33,13 +33,7 @@ impl<C: ProjectiveCurve> ArgumentOfKnowledge for SchnorrIdentification<C> {
         witness: &Self::Witness,
         fs_rng: &mut FiatShamirRng<D>,
     ) -> Result<Self::Proof, CryptoError> {
-        Ok(prover::Prover::create_proof(
-            rng,
-            common_reference_string,
-            statement,
-            witness,
-            fs_rng,
-        ))
+        prover::Prover::create_proof(rng, common_reference_string, statement, witness, fs_rng)
     }
 
     fn verify<D: Digest>(

@@ -49,7 +49,7 @@ where
         rng: &mut R,
         fs_rng: &mut FiatShamirRng<D>,
     ) -> Result<Proof<Scalar, Enc, Comm>, CryptoError> {
-        fs_rng.absorb(&to_bytes![b"shuffle_argument"].unwrap());
+        fs_rng.absorb(&to_bytes![b"shuffle_argument"]?);
 
         let r: Vec<Scalar> = sample_vector(rng, self.statement.m);
 
@@ -68,7 +68,10 @@ where
             .collect::<Result<Vec<_>, CryptoError>>()?;
 
         // Public data
-        fs_rng.absorb(&to_bytes![self.parameters.public_key, self.parameters.commit_key].unwrap());
+        fs_rng.absorb(&to_bytes![
+            self.parameters.public_key,
+            self.parameters.commit_key
+        ]?);
 
         // statement
         fs_rng.absorb(
@@ -82,7 +85,7 @@ where
         );
 
         // round 1
-        fs_rng.absorb(&to_bytes![a_commits].unwrap());
+        fs_rng.absorb(&to_bytes![a_commits]?);
         let x = Scalar::rand(fs_rng);
 
         let challenge_powers = scalar_powers(x, self.witness.permutation.size)[1..].to_vec();
@@ -102,7 +105,7 @@ where
             .collect::<Result<Vec<_>, CryptoError>>()?;
 
         //round 2
-        fs_rng.absorb(&to_bytes![b_commits].unwrap());
+        fs_rng.absorb(&to_bytes![b_commits]?);
         let y = Scalar::rand(fs_rng);
         let z = Scalar::rand(fs_rng);
 

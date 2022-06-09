@@ -68,7 +68,7 @@ where
         let n = self.witness.matrix_a[0].len();
         let num_of_diagonals = 2 * m - 1;
 
-        fs_rng.absorb(&to_bytes![m as u32, n as u32, num_of_diagonals as u32].unwrap());
+        fs_rng.absorb(&to_bytes![m as u32, n as u32, num_of_diagonals as u32]?);
 
         let a_0: Vec<Scalar> = sample_vector(rng, n);
         let r_0 = Scalar::rand(rng);
@@ -90,7 +90,7 @@ where
                 let commit = Comm::commit(self.parameters.commit_key, &vec![b_k], s_k)?;
                 Ok(commit)
             })
-            .collect::<Result<Vec<Comm::Commitment>, _>>()?;
+            .collect::<Result<Vec<Comm::Commitment>, CryptoError>>()?;
 
         let diagonals = Self::diagonals_from_chunks(
             &self.statement.shuffled_ciphers,
@@ -123,7 +123,7 @@ where
             })
             .collect::<Vec<Enc::Ciphertext>>();
 
-        fs_rng.absorb(&to_bytes![a_0_commit, commit_b_k, vector_e_k].unwrap());
+        fs_rng.absorb(&to_bytes![a_0_commit, commit_b_k, vector_e_k]?);
 
         let challenge = Scalar::rand(fs_rng);
 

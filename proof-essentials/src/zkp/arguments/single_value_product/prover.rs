@@ -43,7 +43,7 @@ where
         rng: &mut R,
         fs_rng: &mut FiatShamirRng<D>,
     ) -> Result<Proof<Scalar, Comm>, CryptoError> {
-        fs_rng.absorb(&to_bytes![b"single_value_product_argument"].unwrap());
+        fs_rng.absorb(&to_bytes![b"single_value_product_argument"]?);
 
         // generate vector b
         let b: Vec<Scalar> = iter::once(self.witness.a[0])
@@ -103,10 +103,13 @@ where
         let diff_commit = Comm::commit(&self.parameters.commit_key, &diffs, s_x)?;
 
         //public information
-        fs_rng.absorb(&to_bytes![self.parameters.commit_key, self.statement.a_commit].unwrap());
+        fs_rng.absorb(&to_bytes![
+            self.parameters.commit_key,
+            self.statement.a_commit
+        ]?);
 
         //commits
-        fs_rng.absorb(&to_bytes![d_commit, delta_commit, diff_commit].unwrap());
+        fs_rng.absorb(&to_bytes![d_commit, delta_commit, diff_commit]?);
 
         let x = Scalar::rand(fs_rng);
 

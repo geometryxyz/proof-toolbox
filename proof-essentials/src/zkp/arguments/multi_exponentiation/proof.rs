@@ -60,9 +60,13 @@ where
             .unwrap(),
         );
 
-        fs_rng.absorb(&to_bytes![m as u32, n as u32, num_of_diagonals as u32].unwrap());
+        fs_rng.absorb(&to_bytes![m as u32, n as u32, num_of_diagonals as u32]?);
 
-        fs_rng.absorb(&to_bytes![self.a_0_commit, self.commit_b_k, self.vector_e_k].unwrap());
+        fs_rng.absorb(&to_bytes![
+            self.a_0_commit,
+            self.commit_b_k,
+            self.vector_e_k
+        ]?);
 
         let challenge = Scalar::rand(fs_rng);
 

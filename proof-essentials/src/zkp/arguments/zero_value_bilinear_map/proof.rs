@@ -53,20 +53,17 @@ where
             )));
         }
 
-        fs_rng.absorb(&to_bytes![b"zero_argument"].unwrap());
+        fs_rng.absorb(&to_bytes![b"zero_argument"]?);
 
         // Public parameters
-        fs_rng.absorb(
-            &to_bytes![
-                proof_parameters.commit_key,
-                proof_parameters.m as u32,
-                proof_parameters.n as u32
-            ]
-            .unwrap(),
-        );
+        fs_rng.absorb(&to_bytes![
+            proof_parameters.commit_key,
+            proof_parameters.m as u32,
+            proof_parameters.n as u32
+        ]?);
 
         // Random values
-        fs_rng.absorb(&to_bytes![self.a_0_commit, self.b_m_commit].unwrap());
+        fs_rng.absorb(&to_bytes![self.a_0_commit, self.b_m_commit]?);
 
         // Commitments
         fs_rng.absorb(

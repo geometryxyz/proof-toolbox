@@ -25,7 +25,12 @@ impl<C: ProjectiveCurve> Proof<C> {
         statement: &Statement<C>,
         fs_rng: &mut FiatShamirRng<D>,
     ) -> Result<(), CryptoError> {
-        fs_rng.absorb(&to_bytes![b"schnorr_identity", pp, statement, &self.random_commit].unwrap());
+        fs_rng.absorb(&to_bytes![
+            b"schnorr_identity",
+            pp,
+            statement,
+            &self.random_commit
+        ]?);
 
         let c = C::ScalarField::rand(fs_rng);
 

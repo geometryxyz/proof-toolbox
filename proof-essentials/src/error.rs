@@ -29,4 +29,13 @@ pub enum CryptoError {
 
     #[error("InvalidShuffleStatement")]
     InvalidShuffleStatement,
+
+    #[error("IoError: {0}")]
+    IoError(String),
+}
+
+impl From<std::io::Error> for CryptoError {
+    fn from(err: std::io::Error) -> Self {
+        Self::IoError(err.to_string())
+    }
 }

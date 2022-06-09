@@ -27,17 +27,14 @@ impl<C: ProjectiveCurve> Proof<C> {
         statement: &Statement<C>,
         fs_rng: &mut FiatShamirRng<D>,
     ) -> Result<(), CryptoError> {
-        fs_rng.absorb(
-            &to_bytes![
-                b"chaum_pedersen",
-                parameters.g,
-                parameters.h,
-                statement.0,
-                statement.1
-            ]
-            .unwrap(),
-        );
-        fs_rng.absorb(&to_bytes![&self.a, &self.b].unwrap());
+        fs_rng.absorb(&to_bytes![
+            b"chaum_pedersen",
+            parameters.g,
+            parameters.h,
+            statement.0,
+            statement.1
+        ]?);
+        fs_rng.absorb(&to_bytes![&self.a, &self.b]?);
 
         let c = C::ScalarField::rand(fs_rng);
 

@@ -42,7 +42,7 @@ where
         rng: &mut R,
         fs_rng: &mut FiatShamirRng<D>,
     ) -> Result<Proof<Scalar, Comm>, CryptoError> {
-        fs_rng.absorb(&to_bytes![b"zero_argument"].unwrap());
+        fs_rng.absorb(&to_bytes![b"zero_argument"]?);
 
         let a_0: Vec<Scalar> = sample_vector(rng, self.parameters.n);
         let b_m: Vec<Scalar> = sample_vector(rng, self.parameters.n);
@@ -90,7 +90,7 @@ where
         );
 
         // Random values
-        fs_rng.absorb(&to_bytes![a_0_commit, b_m_commit].unwrap());
+        fs_rng.absorb(&to_bytes![a_0_commit, b_m_commit]?);
 
         // Commitments
         fs_rng.absorb(

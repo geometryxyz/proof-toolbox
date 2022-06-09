@@ -54,13 +54,17 @@ where
             )));
         }
 
-        fs_rng.absorb(&to_bytes![b"single_value_product_argument"].unwrap());
+        fs_rng.absorb(&to_bytes![b"single_value_product_argument"]?);
 
         //public information
-        fs_rng.absorb(&to_bytes![proof_parameters.commit_key, statement.a_commit].unwrap());
+        fs_rng.absorb(&to_bytes![proof_parameters.commit_key, statement.a_commit]?);
 
         //commits
-        fs_rng.absorb(&to_bytes![self.d_commit, self.delta_commit, self.diff_commit].unwrap());
+        fs_rng.absorb(&to_bytes![
+            self.d_commit,
+            self.delta_commit,
+            self.diff_commit
+        ]?);
 
         let x = Scalar::rand(fs_rng);
 

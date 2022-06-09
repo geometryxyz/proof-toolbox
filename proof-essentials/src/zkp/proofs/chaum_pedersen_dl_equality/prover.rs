@@ -1,3 +1,5 @@
+use crate::error::CryptoError;
+
 use super::proof::Proof;
 use super::{Parameters, Statement, Witness};
 
@@ -26,7 +28,7 @@ where
         statement: &Statement<C>,
         witness: &Witness<C>,
         fs_rng: &mut FiatShamirRng<D>,
-    ) -> Proof<C> {
+    ) -> Result<Proof<C>, CryptoError> {
         fs_rng.absorb(
             &to_bytes![
                 b"chaum_pedersen",
@@ -42,12 +44,12 @@ where
         let a = parameters.g.mul(omega.into_repr());
         let b = parameters.h.mul(omega.into_repr());
 
-        fs_rng.absorb(&to_bytes![a, b].unwrap());
+        fs_rng.absorb(&to_bytes![a, b]?);
 
         let c = C::ScalarField::rand(fs_rng);
 
         let r = omega + c * *witness;
 
-        Proof { a, b, r }
+        Ok(Proof { a, b, r })
     }
 }

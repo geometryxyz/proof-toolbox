@@ -45,7 +45,7 @@ where
         rng: &mut R,
         fs_rng: &mut FiatShamirRng<D>,
     ) -> Result<Proof<Scalar, Comm>, CryptoError> {
-        fs_rng.absorb(&to_bytes![b"hadamard_product_argument"].unwrap());
+        fs_rng.absorb(&to_bytes![b"hadamard_product_argument"]?);
 
         // Compute intermediate products (b values). Final b should be the one from the witness
         let mut acc = vec![Scalar::one(); self.parameters.n];
@@ -84,17 +84,14 @@ where
         s.push(self.witness.random_for_b_commit);
 
         // Public parameters
-        fs_rng.absorb(
-            &to_bytes![
-                self.parameters.commit_key,
-                self.parameters.m as u32,
-                self.parameters.n as u32
-            ]
-            .unwrap(),
-        );
+        fs_rng.absorb(&to_bytes![
+            self.parameters.commit_key,
+            self.parameters.m as u32,
+            self.parameters.n as u32
+        ]?);
 
         // Commited values
-        fs_rng.absorb(&to_bytes![b_commits].unwrap());
+        fs_rng.absorb(&to_bytes![b_commits]?);
 
         // Challenges
         let x = Scalar::rand(fs_rng);

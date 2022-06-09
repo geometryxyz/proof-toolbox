@@ -1,3 +1,5 @@
+use crate::error::CryptoError;
+
 use super::{proof::Proof, Parameters, Statement, Witness};
 
 use ark_ec::{AffineCurve, ProjectiveCurve};
@@ -26,20 +28,25 @@ where
         statement: &Statement<C>,
         witness: &Witness<C>,
         fs_rng: &mut FiatShamirRng<D>,
-    ) -> Proof<C> {
+    ) -> Result<Proof<C>, CryptoError> {
         let random = C::ScalarField::rand(rng);
 
         let random_commit = pp.mul(random.into_repr());
 
-        fs_rng.absorb(&to_bytes![b"schnorr_identity", pp, statement, random_commit].unwrap());
+        fs_rng.absorb(&to_bytes![
+            b"schnorr_identity",
+            pp,
+            statement,
+            random_commit
+        ]?);
 
         let c = C::ScalarField::rand(fs_rng);
 
         let opening = random - c * witness;
 
-        Proof {
+        Ok(Proof {
             random_commit,
             opening,
-        }
+        })
     }
 }

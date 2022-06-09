@@ -45,7 +45,7 @@ where
         rng: &mut R,
         fs_rng: &mut FiatShamirRng<D>,
     ) -> Result<Proof<Scalar, Comm>, CryptoError> {
-        fs_rng.absorb(&to_bytes![b"matrix_elements_product"].unwrap());
+        fs_rng.absorb(&to_bytes![b"matrix_elements_product"]?);
 
         let s = Scalar::rand(rng);
 

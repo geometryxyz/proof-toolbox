@@ -33,7 +33,7 @@ where
         fs_rng: &mut FiatShamirRng<D>,
     ) -> Result<(), CryptoError> {
         statement.is_valid(proof_parameters)?;
-        fs_rng.absorb(&to_bytes![b"matrix_elements_product"].unwrap());
+        fs_rng.absorb(&to_bytes![b"matrix_elements_product"]?);
 
         // Verifiy hadamrd product argument
         let hadamard_product_parameters = hadamard_product::Parameters::new(
