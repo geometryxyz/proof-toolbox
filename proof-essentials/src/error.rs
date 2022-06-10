@@ -32,6 +32,9 @@ pub enum CryptoError {
 
     #[error("IoError: {0}")]
     IoError(String),
+
+    #[error("Cannot hash to curve")]
+    CannotHashToCurve,
 }
 
 impl From<std::io::Error> for CryptoError {

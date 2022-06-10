@@ -10,7 +10,7 @@ use ark_std::io::{Read, Write};
 use ark_std::UniformRand;
 use digest::Digest;
 
-#[derive(CanonicalDeserialize, CanonicalSerialize)]
+#[derive(Copy, Clone, CanonicalDeserialize, CanonicalSerialize)]
 pub struct Proof<C>
 where
     C: ProjectiveCurve,
