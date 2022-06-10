@@ -4,12 +4,12 @@ use super::{Parameters, Statement, Witness};
 use crate::error::CryptoError;
 use crate::utils::rand::sample_vector;
 use crate::vector_commitment::HomomorphicCommitmentScheme;
-use crate::zkp::transcript::TranscriptProtocol;
-use ark_std::rand::Rng;
-use std::iter;
 
-use ark_ff::Field;
-use merlin::Transcript;
+use ark_ff::{to_bytes, Field};
+use ark_marlin::rng::FiatShamirRng;
+use ark_std::rand::Rng;
+use digest::Digest;
+use std::iter;
 
 pub struct Prover<'a, Scalar, Comm>
 where
@@ -17,7 +17,6 @@ where
     Comm: HomomorphicCommitmentScheme<Scalar>,
 {
     parameters: &'a Parameters<'a, Scalar, Comm>,
-    transcript: Transcript,
     statement: &'a Statement<'a, Scalar, Comm>,
     witness: &'a Witness<'a, Scalar>,
 }
@@ -34,14 +33,17 @@ where
     ) -> Self {
         Self {
             parameters,
-            transcript: Transcript::new(b"single_value_product_argument"),
             statement,
             witness,
         }
     }
 
-    pub fn prove<R: Rng>(&self, rng: &mut R) -> Result<Proof<Scalar, Comm>, CryptoError> {
-        let mut transcript = self.transcript.clone();
+    pub fn prove<R: Rng, D: Digest>(
+        &self,
+        rng: &mut R,
+        fs_rng: &mut FiatShamirRng<D>,
+    ) -> Result<Proof<Scalar, Comm>, CryptoError> {
+        fs_rng.absorb(&to_bytes![b"single_value_product_argument"]?);
 
         // generate vector b
         let b: Vec<Scalar> = iter::once(self.witness.a[0])
@@ -101,15 +103,15 @@ where
         let diff_commit = Comm::commit(&self.parameters.commit_key, &diffs, s_x)?;
 
         //public information
-        transcript.append(b"commit_key", self.parameters.commit_key);
-        transcript.append(b"a_commit", self.statement.a_commit);
+        fs_rng.absorb(&to_bytes![
+            self.parameters.commit_key,
+            self.statement.a_commit
+        ]?);
 
         //commits
-        transcript.append(b"d_commit", &d_commit);
-        transcript.append(b"delta_commit", &delta_commit);
-        transcript.append(b"diff_commit", &diff_commit);
+        fs_rng.absorb(&to_bytes![d_commit, delta_commit, diff_commit]?);
 
-        let x = transcript.challenge_scalar(b"x");
+        let x = Scalar::rand(fs_rng);
 
         let a_blinded = Self::blind(&self.witness.a, &d, x);
         let r_blinded = x * self.witness.random_for_a_commit + r_d;

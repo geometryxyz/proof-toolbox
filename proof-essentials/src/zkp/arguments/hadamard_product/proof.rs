@@ -3,12 +3,13 @@ use super::{Parameters, Statement};
 use crate::error::CryptoError;
 use crate::vector_commitment::HomomorphicCommitmentScheme;
 use crate::zkp::arguments::{zero_value_bilinear_map, zero_value_bilinear_map::YMapping};
-use crate::zkp::{arguments::scalar_powers, transcript::TranscriptProtocol, ArgumentOfKnowledge};
+use crate::zkp::{arguments::scalar_powers, ArgumentOfKnowledge};
 
-use ark_ff::{Field, Zero};
+use ark_ff::{to_bytes, Field, Zero};
+use ark_marlin::rng::FiatShamirRng;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, SerializationError};
 use ark_std::io::{Read, Write};
-use merlin::Transcript;
+use digest::Digest;
 
 #[derive(CanonicalDeserialize, CanonicalSerialize)]
 pub struct Proof<Scalar, Comm>
@@ -28,12 +29,13 @@ where
     Scalar: Field,
     Comm: HomomorphicCommitmentScheme<Scalar>,
 {
-    pub fn verify(
+    pub fn verify<D: Digest>(
         &self,
         proof_parameters: &Parameters<Scalar, Comm>,
         statement: &Statement<Scalar, Comm>,
+        fs_rng: &mut FiatShamirRng<D>,
     ) -> Result<(), CryptoError> {
-        let mut transcript = Transcript::new(b"hadamard_product_argument");
+        fs_rng.absorb(&to_bytes![b"hadamard_product_argument"]?);
 
         // check c_b_1 = c_a_1
         if statement.commitment_to_a[0] != self.b_commits[0] {
@@ -50,16 +52,18 @@ where
         }
 
         // Public parameters
-        transcript.append(b"commit_key", proof_parameters.commit_key);
-        transcript.append(b"m", &proof_parameters.m);
-        transcript.append(b"n", &proof_parameters.n);
+        fs_rng.absorb(&to_bytes![
+            proof_parameters.commit_key,
+            proof_parameters.m as u32,
+            proof_parameters.n as u32
+        ]?);
 
-        // Commited values
-        transcript.append(b"b_commit", &self.b_commits);
+        // Committed values
+        fs_rng.absorb(&to_bytes![self.b_commits]?);
 
         // Extract challenges
-        let x: Scalar = transcript.challenge_scalar(b"x");
-        let y: Scalar = transcript.challenge_scalar(b"y");
+        let x = Scalar::rand(fs_rng);
+        let y = Scalar::rand(fs_rng);
 
         // Precompute all powers of the x challenge from 0 to m-1
         let x_challenge_powers = scalar_powers(x, proof_parameters.m - 1);
@@ -110,6 +114,7 @@ where
             &zero_arg_parameters,
             &zero_arg_statement,
             &self.zero_arg_proof,
+            fs_rng,
         ) {
             Ok(_) => Ok(()),
             Err(_) => Err(CryptoError::ProofVerificationError(String::from(

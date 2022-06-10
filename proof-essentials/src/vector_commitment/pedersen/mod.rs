@@ -2,7 +2,7 @@ use crate::error::CryptoError;
 use crate::vector_commitment::HomomorphicCommitmentScheme;
 
 use ark_ec::{msm::VariableBaseMSM, ProjectiveCurve};
-use ark_ff::PrimeField;
+use ark_ff::{PrimeField, ToBytes};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, SerializationError};
 use ark_std::{
     io::{Read, Write},
@@ -29,8 +29,25 @@ impl<C: ProjectiveCurve> CommitKey<C> {
     }
 }
 
+impl<C: ProjectiveCurve> ToBytes for CommitKey<C> {
+    fn write<W: Write>(&self, mut w: W) -> ark_std::io::Result<()> {
+        self.g.write(&mut w)?;
+        self.h.write(&mut w)?;
+
+        Ok(())
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, CanonicalSerialize, CanonicalDeserialize)]
 pub struct Commitment<C: ProjectiveCurve>(pub C::Affine);
+
+impl<C: ProjectiveCurve> ToBytes for Commitment<C> {
+    fn write<W: Write>(&self, mut w: W) -> ark_std::io::Result<()> {
+        self.0.write(&mut w)?;
+
+        Ok(())
+    }
+}
 
 impl<C: ProjectiveCurve> HomomorphicCommitmentScheme<C::ScalarField> for PedersenCommitment<C> {
     type CommitKey = CommitKey<C>;

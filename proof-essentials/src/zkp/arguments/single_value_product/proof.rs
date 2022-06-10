@@ -2,12 +2,12 @@ use super::{Parameters, Statement};
 
 use crate::error::CryptoError;
 use crate::vector_commitment::HomomorphicCommitmentScheme;
-use crate::zkp::transcript::TranscriptProtocol;
 
-use ark_ff::Field;
+use ark_ff::{to_bytes, Field};
+use ark_marlin::rng::FiatShamirRng;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, SerializationError};
 use ark_std::io::{Read, Write};
-use merlin::Transcript;
+use digest::Digest;
 
 #[derive(CanonicalDeserialize, CanonicalSerialize)]
 pub struct Proof<Scalar, Comm>
@@ -32,10 +32,11 @@ where
     Scalar: Field,
     Comm: HomomorphicCommitmentScheme<Scalar>,
 {
-    pub fn verify(
+    pub fn verify<D: Digest>(
         &self,
         proof_parameters: &Parameters<Scalar, Comm>,
         statement: &Statement<Scalar, Comm>,
+        fs_rng: &mut FiatShamirRng<D>,
     ) -> Result<(), CryptoError> {
         if self.b_blinded.len() != proof_parameters.n {
             return Err(CryptoError::ProofVerificationError(String::from(
@@ -53,17 +54,19 @@ where
             )));
         }
 
-        let mut transcript = Transcript::new(b"single_value_product_argument");
+        fs_rng.absorb(&to_bytes![b"single_value_product_argument"]?);
+
         //public information
-        transcript.append(b"commit_key", proof_parameters.commit_key);
-        transcript.append(b"a_commit", statement.a_commit);
+        fs_rng.absorb(&to_bytes![proof_parameters.commit_key, statement.a_commit]?);
 
         //commits
-        transcript.append(b"d_commit", &self.d_commit);
-        transcript.append(b"delta_commit", &self.delta_commit);
-        transcript.append(b"diff_commit", &self.diff_commit);
+        fs_rng.absorb(&to_bytes![
+            self.d_commit,
+            self.delta_commit,
+            self.diff_commit
+        ]?);
 
-        let x: Scalar = transcript.challenge_scalar(b"x");
+        let x = Scalar::rand(fs_rng);
 
         if self.b_blinded[proof_parameters.n - 1] != x * statement.b {
             return Err(CryptoError::ProofVerificationError(String::from(

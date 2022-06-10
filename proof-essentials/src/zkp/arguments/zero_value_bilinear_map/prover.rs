@@ -4,10 +4,10 @@ use crate::error::CryptoError;
 use crate::utils::{rand::sample_vector, vector_arithmetic::dot_product};
 use crate::vector_commitment::HomomorphicCommitmentScheme;
 use crate::zkp::arguments::scalar_powers;
-use ark_ff::Field;
-use merlin::Transcript;
+use ark_ff::{to_bytes, Field};
+use ark_marlin::rng::FiatShamirRng;
+use digest::Digest;
 
-use crate::zkp::transcript::TranscriptProtocol;
 use rand::Rng;
 
 pub struct Prover<'a, Scalar, Comm>
@@ -16,7 +16,6 @@ where
     Comm: HomomorphicCommitmentScheme<Scalar>,
 {
     parameters: &'a Parameters<'a, Scalar, Comm>,
-    transcript: Transcript,
     statement: &'a Statement<'a, Scalar, Comm>,
     witness: &'a Witness<'a, Scalar>,
 }
@@ -33,14 +32,17 @@ where
     ) -> Self {
         Self {
             parameters,
-            transcript: Transcript::new(b"zero_argument"),
             statement,
             witness,
         }
     }
 
-    pub fn prove<R: Rng>(&self, rng: &mut R) -> Result<Proof<Scalar, Comm>, CryptoError> {
-        let mut transcript = self.transcript.clone();
+    pub fn prove<R: Rng, D: Digest>(
+        &self,
+        rng: &mut R,
+        fs_rng: &mut FiatShamirRng<D>,
+    ) -> Result<Proof<Scalar, Comm>, CryptoError> {
+        fs_rng.absorb(&to_bytes![b"zero_argument"]?);
 
         let a_0: Vec<Scalar> = sample_vector(rng, self.parameters.n);
         let b_m: Vec<Scalar> = sample_vector(rng, self.parameters.n);
@@ -69,7 +71,7 @@ where
         let mut t: Vec<Scalar> = sample_vector(rng, 2 * self.parameters.m + 1);
         t[self.parameters.m + 1] = Scalar::zero();
 
-        let vector_of_commited_diagonals = diagonals
+        let vector_of_committed_diagonals = diagonals
             .iter()
             .zip(t.iter())
             .map(|(&diagonal, &random)| -> Result<_, CryptoError> {
@@ -78,23 +80,29 @@ where
             .collect::<Result<Vec<_>, CryptoError>>()?;
 
         // Public parameters
-        transcript.append(b"commit_key", self.parameters.commit_key);
-        transcript.append(b"m", &self.parameters.m);
-        transcript.append(b"n", &self.parameters.n);
-
-        // Random values
-        transcript.append(b"c_a_0", &a_0_commit);
-        transcript.append(b"c_b_m", &b_m_commit);
-
-        // Commitments
-        transcript.append(b"commitment_to_a", self.statement.commitment_to_a);
-        transcript.append(b"commitment_to_b", self.statement.commitment_to_b);
-        transcript.append(
-            b"vector_of_commited_diagonals",
-            &vector_of_commited_diagonals,
+        fs_rng.absorb(
+            &to_bytes![
+                self.parameters.commit_key,
+                self.parameters.m as u32,
+                self.parameters.n as u32
+            ]
+            .unwrap(),
         );
 
-        let x: Scalar = transcript.challenge_scalar(b"x");
+        // Random values
+        fs_rng.absorb(&to_bytes![a_0_commit, b_m_commit]?);
+
+        // Commitments
+        fs_rng.absorb(
+            &to_bytes![
+                self.statement.commitment_to_a,
+                self.statement.commitment_to_b,
+                vector_of_committed_diagonals
+            ]
+            .unwrap(),
+        );
+
+        let x = Scalar::rand(fs_rng);
 
         // Precompute all powers of the challenge from 0 to number_of_diagonals of the extended matrix
         let challenge_powers = scalar_powers(x, 2 * self.parameters.m);
@@ -142,7 +150,7 @@ where
         let proof = Proof {
             a_0_commit,
             b_m_commit,
-            vector_of_commited_diagonals,
+            vector_of_committed_diagonals,
 
             a_blinded,
             b_blinded,

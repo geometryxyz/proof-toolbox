@@ -4,12 +4,13 @@ use crate::error::CryptoError;
 use crate::homomorphic_encryption::HomomorphicEncryptionScheme;
 use crate::utils::vector_arithmetic::dot_product;
 use crate::vector_commitment::HomomorphicCommitmentScheme;
-use crate::zkp::{arguments::scalar_powers, transcript::TranscriptProtocol};
+use crate::zkp::arguments::scalar_powers;
+use ark_marlin::rng::FiatShamirRng;
+use digest::Digest;
 
-use ark_ff::{Field, Zero};
+use ark_ff::{to_bytes, Field, Zero};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, SerializationError};
 use ark_std::io::{Read, Write};
-use merlin::Transcript;
 
 #[derive(CanonicalDeserialize, CanonicalSerialize)]
 pub struct Proof<Scalar, Enc, Comm>
@@ -37,38 +38,37 @@ where
     Enc: HomomorphicEncryptionScheme<Scalar>,
     Comm: HomomorphicCommitmentScheme<Scalar>,
 {
-    pub fn verify(
+    pub fn verify<D: Digest>(
         &self,
         proof_parameters: &Parameters<Scalar, Enc, Comm>,
         statement: &Statement<Scalar, Enc, Comm>,
+        fs_rng: &mut FiatShamirRng<D>,
     ) -> Result<(), CryptoError> {
         let m = statement.shuffled_ciphers.len();
         let n = statement.shuffled_ciphers[0].len();
         let num_of_diagonals = 2 * m - 1;
 
-        let mut transcript = Transcript::new(b"multi_exponent_argument");
-
-        transcript.append(b"public_key", proof_parameters.public_key);
-        transcript.append(b"commit_key", proof_parameters.commit_key);
-
-        // transcript.append(b"parameters", &proof_parameters);
-
-        transcript.append(
-            b"commitments_to_exponents",
-            statement.commitments_to_exponents,
+        fs_rng.absorb(
+            &to_bytes![
+                b"multi-exponentiation",
+                proof_parameters.public_key,
+                proof_parameters.commit_key,
+                statement.commitments_to_exponents,
+                &statement.product,
+                statement.shuffled_ciphers
+            ]
+            .unwrap(),
         );
-        transcript.append(b"product", &statement.product);
-        transcript.append(b"shuffled_ciphers", statement.shuffled_ciphers);
 
-        transcript.append(b"m", &m);
-        transcript.append(b"n", &n);
-        transcript.append(b"num_of_diagonals", &num_of_diagonals);
+        fs_rng.absorb(&to_bytes![m as u32, n as u32, num_of_diagonals as u32]?);
 
-        transcript.append(b"a_0_commit", &self.a_0_commit);
-        transcript.append(b"commit_B_k", &self.commit_b_k);
-        transcript.append(b"vector_E_k", &self.vector_e_k);
+        fs_rng.absorb(&to_bytes![
+            self.a_0_commit,
+            self.commit_b_k,
+            self.vector_e_k
+        ]?);
 
-        let challenge = transcript.challenge_scalar(b"x");
+        let challenge = Scalar::rand(fs_rng);
 
         // Precompute all powers of the challenge from 0 to number_of_diagonals
         let challenge_powers = scalar_powers(challenge, num_of_diagonals);

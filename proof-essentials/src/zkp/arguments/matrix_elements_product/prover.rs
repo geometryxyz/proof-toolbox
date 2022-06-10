@@ -7,9 +7,11 @@ use crate::zkp::{
     arguments::{hadamard_product, single_value_product},
     ArgumentOfKnowledge,
 };
-use ark_std::rand::Rng;
 
-use ark_ff::Field;
+use ark_ff::{to_bytes, Field};
+use ark_marlin::rng::FiatShamirRng;
+use ark_std::rand::Rng;
+use digest::Digest;
 
 pub struct Prover<'a, Scalar, Comm>
 where
@@ -38,7 +40,13 @@ where
         }
     }
 
-    pub fn prove<R: Rng>(&self, rng: &mut R) -> Result<Proof<Scalar, Comm>, CryptoError> {
+    pub fn prove<R: Rng, D: Digest>(
+        &self,
+        rng: &mut R,
+        fs_rng: &mut FiatShamirRng<D>,
+    ) -> Result<Proof<Scalar, Comm>, CryptoError> {
+        fs_rng.absorb(&to_bytes![b"matrix_elements_product"]?);
+
         let s = Scalar::rand(rng);
 
         let mut product_along_rows = vec![Scalar::one(); self.parameters.n];
@@ -71,6 +79,7 @@ where
             &hadamard_product_parameters,
             &hadamard_product_statement,
             &hadamard_product_witness,
+            fs_rng,
         )?;
 
         // Engage in single value product argument for b_commit and b as a statement:
@@ -90,6 +99,7 @@ where
             &single_value_product_parameters,
             &single_value_product_statement,
             &single_value_product_witness,
+            fs_rng,
         )?;
 
         let proof = Proof {

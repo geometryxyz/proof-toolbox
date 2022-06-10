@@ -1,18 +1,17 @@
 use super::{proof::Proof, Parameters, Statement, Witness};
 
-use crate::zkp::arguments::{matrix_elements_product as product_argument, multi_exponentiation};
-use ark_ff::{Field, Zero};
-
 use crate::error::CryptoError;
 use crate::homomorphic_encryption::HomomorphicEncryptionScheme;
 use crate::utils::rand::sample_vector;
 use crate::utils::vector_arithmetic::{dot_product, reshape};
 use crate::vector_commitment::HomomorphicCommitmentScheme;
 use crate::zkp::arguments::scalar_powers;
-use crate::zkp::transcript::TranscriptProtocol;
+use crate::zkp::arguments::{matrix_elements_product as product_argument, multi_exponentiation};
 use crate::zkp::ArgumentOfKnowledge;
 
-use merlin::Transcript;
+use ark_ff::{to_bytes, Field, Zero};
+use ark_marlin::rng::FiatShamirRng;
+use digest::Digest;
 use rand::Rng;
 
 pub struct Prover<'a, Scalar, Enc, Comm>
@@ -22,7 +21,6 @@ where
     Comm: HomomorphicCommitmentScheme<Scalar>,
 {
     parameters: &'a Parameters<'a, Scalar, Enc, Comm>,
-    transcript: Transcript,
     statement: &'a Statement<'a, Scalar, Enc>,
     witness: &'a Witness<'a, Scalar>,
 }
@@ -41,14 +39,17 @@ where
         //TODO add dimension assertions
         Self {
             parameters,
-            transcript: Transcript::new(b"shuffle_argument"),
             statement,
             witness,
         }
     }
 
-    pub fn prove<R: Rng>(&self, rng: &mut R) -> Result<Proof<Scalar, Enc, Comm>, CryptoError> {
-        let mut transcript = self.transcript.clone();
+    pub fn prove<R: Rng, D: Digest>(
+        &self,
+        rng: &mut R,
+        fs_rng: &mut FiatShamirRng<D>,
+    ) -> Result<Proof<Scalar, Enc, Comm>, CryptoError> {
+        fs_rng.absorb(&to_bytes![b"shuffle_argument"]?);
 
         let r: Vec<Scalar> = sample_vector(rng, self.statement.m);
 
@@ -67,19 +68,25 @@ where
             .collect::<Result<Vec<_>, CryptoError>>()?;
 
         // Public data
-        transcript.append(b"public_key", self.parameters.public_key);
-        transcript.append(b"commit_key", self.parameters.commit_key);
+        fs_rng.absorb(&to_bytes![
+            self.parameters.public_key,
+            self.parameters.commit_key
+        ]?);
 
         // statement
-        transcript.append(b"ciphers", self.statement.input_ciphers);
-        transcript.append(b"shuffled", self.statement.shuffled_ciphers);
-        transcript.append(b"m", &self.statement.m);
-        transcript.append(b"n", &self.statement.n);
+        fs_rng.absorb(
+            &to_bytes![
+                self.statement.input_ciphers,
+                self.statement.shuffled_ciphers,
+                self.statement.m as u32,
+                self.statement.n as u32
+            ]
+            .unwrap(),
+        );
 
         // round 1
-        transcript.append(b"a_commits", &a_commits);
-
-        let x: Scalar = transcript.challenge_scalar(b"x");
+        fs_rng.absorb(&to_bytes![a_commits]?);
+        let x = Scalar::rand(fs_rng);
 
         let challenge_powers = scalar_powers(x, self.witness.permutation.size)[1..].to_vec();
 
@@ -98,10 +105,9 @@ where
             .collect::<Result<Vec<_>, CryptoError>>()?;
 
         //round 2
-        transcript.append(b"b_commits", &b_commits);
-
-        let y: Scalar = transcript.challenge_scalar(b"y");
-        let z: Scalar = transcript.challenge_scalar(b"z");
+        fs_rng.absorb(&to_bytes![b_commits]?);
+        let y = Scalar::rand(fs_rng);
+        let z = Scalar::rand(fs_rng);
 
         let d = a
             .iter()
@@ -146,7 +152,7 @@ where
             &product_argument_witness,
         );
 
-        let product_argument_proof = product_argument_prover.prove(rng)?;
+        let product_argument_proof = product_argument_prover.prove(rng, fs_rng)?;
 
         // Engage in multi-exponentation argument ----------------------------------------------------------
         let multi_exp_parameters = multi_exponentiation::Parameters::new(
@@ -187,6 +193,7 @@ where
             &multi_exp_parameters,
             &multi_exp_statement,
             &multi_exp_witness,
+            fs_rng,
         )?;
 
         // Produce proof

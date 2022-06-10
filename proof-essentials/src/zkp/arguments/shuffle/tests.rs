@@ -1,15 +1,16 @@
 #[cfg(test)]
 
 mod test {
-
     use crate::homomorphic_encryption::{el_gamal, HomomorphicEncryptionScheme};
+    use crate::utils::permutation::Permutation;
     use crate::utils::rand::sample_vector;
     use crate::vector_commitment::{pedersen, HomomorphicCommitmentScheme};
     use crate::zkp::{arguments::shuffle, ArgumentOfKnowledge};
 
-    use crate::utils::permutation::Permutation;
     use ark_ff::Zero;
+    use ark_marlin::rng::FiatShamirRng;
     use ark_std::{rand::thread_rng, UniformRand};
+    use blake2::Blake2s;
     use starknet_curve;
     use std::iter::Iterator;
 
@@ -27,6 +28,8 @@ mod test {
     type Statement<'a> = shuffle::Statement<'a, Scalar, Enc>;
     type ShuffleArgument<'a> = shuffle::ShuffleArgument<'a, Scalar, Enc, Comm>;
     type Parameters<'a> = shuffle::Parameters<'a, Scalar, Enc, Comm>;
+
+    type FS = FiatShamirRng<Blake2s>;
 
     #[test]
     fn test_shuffle_argument() {
@@ -66,21 +69,28 @@ mod test {
         let statement = Statement::new(&ciphers, &shuffled_deck, m, n);
         let witness = Witness::new(&permutation, &masking_factors);
 
-        let valid_proof = ShuffleArgument::prove(rng, &parameters, &statement, &witness).unwrap();
+        let mut fs_rng = FS::from_seed(b"Initialised with some input");
+        let valid_proof =
+            ShuffleArgument::prove(rng, &parameters, &statement, &witness, &mut fs_rng).unwrap();
 
+        let mut fs_rng = FS::from_seed(b"Initialised with some input");
         assert_eq!(
             Ok(()),
-            ShuffleArgument::verify(&parameters, &statement, &valid_proof)
+            ShuffleArgument::verify(&parameters, &statement, &valid_proof, &mut fs_rng)
         );
 
         let new_permutation = Permutation::new(rng, number_of_ciphers);
         let bad_witness = Witness::new(&new_permutation, &masking_factors);
 
+        let mut fs_rng = FS::from_seed(b"Initialised with some input");
         let invalid_proof =
-            ShuffleArgument::prove(rng, &parameters, &statement, &bad_witness).unwrap();
+            ShuffleArgument::prove(rng, &parameters, &statement, &bad_witness, &mut fs_rng)
+                .unwrap();
+
+        let mut fs_rng = FS::from_seed(b"Initialised with some input");
         assert_ne!(
             Ok(()),
-            ShuffleArgument::verify(&parameters, &statement, &invalid_proof)
+            ShuffleArgument::verify(&parameters, &statement, &invalid_proof, &mut fs_rng)
         );
     }
 }

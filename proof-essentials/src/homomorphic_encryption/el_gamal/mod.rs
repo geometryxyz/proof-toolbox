@@ -2,7 +2,7 @@ use crate::error::CryptoError;
 use crate::homomorphic_encryption::HomomorphicEncryptionScheme;
 
 use ark_ec::{AffineCurve, ProjectiveCurve};
-use ark_ff::{fields::PrimeField, UniformRand};
+use ark_ff::{fields::PrimeField, ToBytes, UniformRand};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, SerializationError};
 use ark_std::{
     io::{Read, Write},
@@ -34,6 +34,15 @@ pub type SecretKey<C> = <C as ProjectiveCurve>::ScalarField;
 
 #[derive(Clone, Copy, PartialEq, Debug, CanonicalSerialize, CanonicalDeserialize)]
 pub struct Ciphertext<C: ProjectiveCurve>(pub C::Affine, pub C::Affine);
+
+impl<C: ProjectiveCurve> ToBytes for Ciphertext<C> {
+    fn write<W: Write>(&self, mut w: W) -> ark_std::io::Result<()> {
+        self.0.write(&mut w)?;
+        self.1.write(&mut w)?;
+
+        Ok(())
+    }
+}
 
 impl<C: ProjectiveCurve> HomomorphicEncryptionScheme<C::ScalarField> for ElGamal<C>
 where

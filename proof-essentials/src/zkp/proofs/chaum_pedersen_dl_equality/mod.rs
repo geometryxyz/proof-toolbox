@@ -5,8 +5,10 @@ mod test;
 use crate::error::CryptoError;
 use crate::zkp::ArgumentOfKnowledge;
 use ark_ec::ProjectiveCurve;
+use ark_marlin::rng::FiatShamirRng;
 use ark_std::marker::PhantomData;
 use ark_std::rand::Rng;
+use digest::Digest;
 
 pub struct DLEquality<'a, C: ProjectiveCurve> {
     _group: PhantomData<&'a C>,
@@ -47,25 +49,22 @@ where
     type Witness = Witness<C>;
     type Proof = proof::Proof<C>;
 
-    fn prove<R: Rng>(
+    fn prove<R: Rng, D: Digest>(
         rng: &mut R,
         common_reference_string: &Self::CommonReferenceString,
         statement: &Self::Statement,
         witness: &Self::Witness,
+        fs_rng: &mut FiatShamirRng<D>,
     ) -> Result<Self::Proof, CryptoError> {
-        Ok(prover::Prover::create_proof(
-            rng,
-            common_reference_string,
-            statement,
-            witness,
-        ))
+        prover::Prover::create_proof(rng, common_reference_string, statement, witness, fs_rng)
     }
 
-    fn verify(
+    fn verify<D: Digest>(
         common_reference_string: &Self::CommonReferenceString,
         statement: &Self::Statement,
         proof: &Self::Proof,
+        fs_rng: &mut FiatShamirRng<D>,
     ) -> Result<(), CryptoError> {
-        proof.verify(common_reference_string, statement)
+        proof.verify(common_reference_string, statement, fs_rng)
     }
 }

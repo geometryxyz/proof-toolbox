@@ -5,10 +5,11 @@ use crate::utils::rand::sample_vector;
 use crate::utils::vector_arithmetic::{dot_product, hadamard_product};
 use crate::vector_commitment::HomomorphicCommitmentScheme;
 use crate::zkp::arguments::{zero_value_bilinear_map, zero_value_bilinear_map::YMapping};
-use crate::zkp::{transcript::TranscriptProtocol, ArgumentOfKnowledge};
+use crate::zkp::ArgumentOfKnowledge;
 
-use ark_ff::{Field, Zero};
-use merlin::Transcript;
+use ark_ff::{to_bytes, Field, Zero};
+use ark_marlin::rng::FiatShamirRng;
+use digest::Digest;
 use rand::Rng;
 use std::iter;
 
@@ -18,7 +19,6 @@ where
     Comm: HomomorphicCommitmentScheme<Scalar>,
 {
     parameters: &'a Parameters<'a, Scalar, Comm>,
-    transcript: Transcript,
     statement: &'a Statement<'a, Scalar, Comm>,
     witness: &'a Witness<'a, Scalar>,
 }
@@ -35,14 +35,17 @@ where
     ) -> Self {
         Self {
             parameters,
-            transcript: Transcript::new(b"hadamard_product_argument"),
             statement,
             witness,
         }
     }
 
-    pub fn prove<R: Rng>(&self, rng: &mut R) -> Result<Proof<Scalar, Comm>, CryptoError> {
-        let mut transcript = self.transcript.clone();
+    pub fn prove<R: Rng, D: Digest>(
+        &self,
+        rng: &mut R,
+        fs_rng: &mut FiatShamirRng<D>,
+    ) -> Result<Proof<Scalar, Comm>, CryptoError> {
+        fs_rng.absorb(&to_bytes![b"hadamard_product_argument"]?);
 
         // Compute intermediate products (b values). Final b should be the one from the witness
         let mut acc = vec![Scalar::one(); self.parameters.n];
@@ -72,7 +75,7 @@ where
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        let b_commit = iter::once(self.statement.commitment_to_a[0])
+        let b_commits = iter::once(self.statement.commitment_to_a[0])
             .chain(b_commit_middle.into_iter())
             .chain(iter::once(self.statement.commitment_to_b))
             .collect::<Vec<Comm::Commitment>>();
@@ -81,16 +84,18 @@ where
         s.push(self.witness.random_for_b_commit);
 
         // Public parameters
-        transcript.append(b"commit_key", self.parameters.commit_key);
-        transcript.append(b"m", &self.parameters.m);
-        transcript.append(b"n", &self.parameters.n);
+        fs_rng.absorb(&to_bytes![
+            self.parameters.commit_key,
+            self.parameters.m as u32,
+            self.parameters.n as u32
+        ]?);
 
         // Commited values
-        transcript.append(b"b_commit", &b_commit);
+        fs_rng.absorb(&to_bytes![b_commits]?);
 
         // Challenges
-        let x = transcript.challenge_scalar(b"x");
-        let y = transcript.challenge_scalar(b"y");
+        let x = Scalar::rand(fs_rng);
+        let y = Scalar::rand(fs_rng);
 
         // Precompute all powers of the x challenge
         let x_challenge_powers = iter::once(Scalar::one())
@@ -115,13 +120,13 @@ where
                 .concat()
                 .to_vec();
 
-        let mut c_d_i = b_commit
+        let mut c_d_i = b_commits
             .iter()
             .zip(x_challenge_powers.iter().skip(1))
             .map(|(&b_i_commit, &x_power_i)| b_i_commit * x_power_i)
             .collect::<Vec<_>>();
 
-        let temp_x_c_d_shifted = b_commit
+        let temp_x_c_d_shifted = b_commits
             .iter()
             .skip(1)
             .zip(x_challenge_powers.iter().skip(1))
@@ -211,14 +216,15 @@ where
             &zero_arg_params,
             &zero_arg_statement,
             &zero_arg_witness,
+            fs_rng,
         )?;
 
         let proof = Proof {
             // Round 1
-            b_commits: b_commit,
+            b_commits,
 
             // Round 2
-            zero_arg_proof: zero_arg_proof,
+            zero_arg_proof,
         };
 
         Ok(proof)

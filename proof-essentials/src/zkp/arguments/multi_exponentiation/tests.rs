@@ -11,7 +11,9 @@ mod test {
     use crate::zkp::{arguments::multi_exponentiation, ArgumentOfKnowledge};
 
     use ark_ff::Zero;
+    use ark_marlin::rng::FiatShamirRng;
     use ark_std::{rand::thread_rng, UniformRand};
+    use blake2::Blake2s;
     use starknet_curve;
     use std::iter::Iterator;
 
@@ -28,6 +30,7 @@ mod test {
     type Witness<'a> = multi_exponentiation::Witness<'a, Scalar>;
     type Statement<'a> = multi_exponentiation::Statement<'a, Scalar, Enc, Comm>;
     type MultiExpArg<'a> = multi_exponentiation::MultiExponentiation<'a, Scalar, Enc, Comm>;
+    type FS = FiatShamirRng<Blake2s>;
 
     #[test]
     fn test_multi_exp() {
@@ -79,17 +82,26 @@ mod test {
 
         let statement = Statement::new(&c_chunks, grand_product, &c_a);
 
-        let proof = MultiExpArg::prove(rng, &parameters, &statement, &witness).unwrap();
+        let mut fs_rng = FS::from_seed(b"Initialised with some input");
+        let proof =
+            MultiExpArg::prove(rng, &parameters, &statement, &witness, &mut fs_rng).unwrap();
 
-        assert_eq!((), proof.verify(&parameters, &statement).unwrap());
+        let mut fs_rng = FS::from_seed(b"Initialised with some input");
+        assert_eq!(
+            (),
+            proof.verify(&parameters, &statement, &mut fs_rng).unwrap()
+        );
 
         let wrong_rho = Scalar::rand(rng);
         let wrong_witness = Witness::new(&a_chunks, &r, wrong_rho);
-        let invalid_proof =
-            MultiExpArg::prove(rng, &parameters, &statement, &wrong_witness).unwrap();
 
+        let mut fs_rng = FS::from_seed(b"Initialised with some input");
+        let invalid_proof =
+            MultiExpArg::prove(rng, &parameters, &statement, &wrong_witness, &mut fs_rng).unwrap();
+
+        let mut fs_rng = FS::from_seed(b"Initialised with some input");
         assert_eq!(
-            invalid_proof.verify(&parameters, &statement),
+            invalid_proof.verify(&parameters, &statement, &mut fs_rng),
             Err(CryptoError::ProofVerificationError(String::from(
                 "Multi Exponentiation",
             )))
