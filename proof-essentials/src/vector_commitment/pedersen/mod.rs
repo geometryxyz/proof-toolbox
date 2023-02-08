@@ -17,7 +17,7 @@ pub struct PedersenCommitment<C: ProjectiveCurve> {
     _curve: PhantomData<C>,
 }
 
-#[derive(CanonicalSerialize, CanonicalDeserialize, Debug)]
+#[derive(Clone, CanonicalSerialize, CanonicalDeserialize, Debug)]
 pub struct CommitKey<C: ProjectiveCurve> {
     g: Vec<C::Affine>,
     h: C::Affine,
