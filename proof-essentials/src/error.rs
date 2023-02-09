@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 /// This is an error that could occur when running a cryptographic primitive
-#[derive(Error, Debug, PartialEq, Clone)]
+#[derive(Error, Debug, PartialEq, Clone, Eq)]
 pub enum CryptoError {
     #[error("Failed to verify {0} proof")]
     ProofVerificationError(String),
