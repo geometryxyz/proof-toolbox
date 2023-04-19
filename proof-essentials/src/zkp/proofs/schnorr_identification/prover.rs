@@ -31,7 +31,7 @@ where
     ) -> Result<Proof<C>, CryptoError> {
         let random = C::ScalarField::rand(rng);
 
-        let random_commit = pp.mul(random.into_repr());
+        let random_commit = pp.mul(random.into_repr()).into();
 
         fs_rng.absorb(&to_bytes![
             b"schnorr_identity",
